@@ -76,6 +76,8 @@ compile = True # use PyTorch 2.0 to compile the model to be faster
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
 exec(open('configurator.py').read()) # overrides from command line or config file
 config = {k: globals()[k] for k in config_keys} # will be useful for logging
+p_mfu = []
+p_loss = []
 # -----------------------------------------------------------------------------
 
 # various inits, derived attributes, I/O setup
@@ -324,13 +326,44 @@ while True:
         if local_iter_num >= 5: # let the training loop settle a bit
             mfu = raw_model.estimate_mfu(batch_size * gradient_accumulation_steps, dt)
             running_mfu = mfu if running_mfu == -1.0 else 0.9*running_mfu + 0.1*mfu
-        print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {running_mfu*100:.2f}%")
+        print(f"token {iter_num * 1638 / 1000} iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {running_mfu*100:.2f}%")
+        if iter_num % 100 == 0: #记录每100次迭代的结果，并记录数据用于绘图
+            p_mfu.append(running_mfu*100)
+            p_loss.append(lossf)
     iter_num += 1
     local_iter_num += 1
-
-    # termination conditions
     if iter_num > max_iters:
+        #画图
+        #输出p_mfu和p_loss
+        tokens_per_iter = 16.38
+        #50个点
+        tokens_label = [i*tokens_per_iter for i in range(50)]
+        print(tokens_label)
+        print(p_mfu)
+        print(p_loss)
+        #去掉p_mfu和p_loss的第一个元素
+        p_mfu.pop(0)
+        p_loss.pop(0)
+        import matplotlib.pyplot as plt
+        plt.figure()
+        plt.plot(p_mfu, marker='o', color='red', label='MFU (%)')
+        plt.xlabel('Iter (100)')
+        plt.ylabel('MFU (%)')
+        plt.title('MFU vs Iter')
+        plt.grid()
+        plt.legend()
+        plt.savefig('mfu_vs_iter.png', dpi=300)
+        plt.close()
+        plt.figure()
+        plt.plot(p_loss, marker='s', color='blue', label='Loss')
+        plt.xlabel('Iter (100)')
+        plt.ylabel('Loss (%)')
+        plt.title('Loss vs Iter')
+        plt.grid()
+        plt.legend()
+        plt.savefig('loss_vs_iter.png', dpi=300)
+        plt.close()
         break
-
+    
 if ddp:
     destroy_process_group()
